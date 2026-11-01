@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Standalone wrapper: same skeleton the Claude Artifact viewer adds around the page. -->
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,-apple-system,"Segoe UI",sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<!-- ARTIFACT:START -->
+<title>Strata Vault Terminal</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600&family=Share+Tech+Mono&display=swap">
+<style>
+/* Layout: FUI spec sheet. A 12-column grid of chrome panels on near-black; the isometric vault anchors
+   the top-left, readouts and layer list stack to its right, history / log / wordmark fill the lower band.
+   Single deliberate dark world (no light variant). */
+:root{
+  color-scheme:dark;
+  --bg:#0E1012; --pnl:#121518; --bar:#262B30; --bar-2:#1B1F23; --cell:#181C20; --cell-2:#1E2328;
+  --line:#272D33; --line-2:#3A434A;
+  --tx:#CDD5DA; --tx-2:#808A92; --tx-3:#4D565D;
+  --teal:#2FA9BA; --teal-2:#45C8DA; --mint:#3CDC8C; --blue:#3A86E6; --red:#E5483B; --amber:#E7B03C;
+  --L1:#33B4C6; --L2:#3E86E8; --L3:#3CDC8C; --L4:#C3CCD2;
+  --f-disp:"Rajdhani", "Barlow Semi Condensed", "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
+  --f-mono:"Share Tech Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+*{ box-sizing:border-box; }
+html, body{ background:var(--bg); color:var(--tx); }
+body{ font-family:var(--f-mono); font-size:12px; line-height:1.4; -webkit-font-smoothing:antialiased; }
+button{ font:inherit; color:inherit; }
+
+.page{
+  max-width:1320px; margin-inline:auto;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:18px 48px;
+  display:grid; gap:26px;
+}
+
+/* ---------- system strip ---------- */
+.sys{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 20px;
+  padding-bottom:12px; border-bottom:1px solid var(--line); color:var(--tx-2); font-size:11px; letter-spacing:.06em; text-transform:uppercase; }
+.sys-l{ display:flex; align-items:center; gap:10px; }
+.sys-l b{ font-family:var(--f-disp); font-weight:600; font-size:18px; letter-spacing:.14em; color:var(--tx); }
+.sys-r{ display:flex; align-items:center; gap:16px; font-variant-numeric:tabular-nums; }
+.dot{ width:6px; height:6px; background:var(--teal); border-radius:50%; box-shadow:0 0 8px var(--teal); }
+.live{ display:inline-flex; align-items:center; gap:6px; color:var(--mint); }
+.live i{ width:6px; height:6px; background:var(--mint); animation:blink 1.6s steps(2, jump-none) infinite; }
+@keyframes blink{ 50%{ opacity:.15; } }
+
+/* ---------- grid ---------- */
+.grid{ display:grid; grid-template-columns:repeat(12, minmax(0, 1fr)); gap:30px 34px; align-items:start; }
+#p-iso{ grid-column:1 / 8; grid-row:1 / 3; }
+#p-read{ grid-column:8 / 13; grid-row:1; }
+#p-layers{ grid-column:8 / 13; grid-row:2; }
+#p-hist{ grid-column:1 / 8; grid-row:3; }
+#p-log{ grid-column:8 / 13; grid-row:3 / 5; }
+#p-brand{ grid-column:1 / 8; grid-row:4; }
+#p-readme{ grid-column:1 / 13; grid-row:5; }
+
+/* ---------- panel chrome ---------- */
+.pnl{ position:relative; min-width:0; }
+.meta, .foot{ display:flex; gap:14px; padding-left:28px; font-size:9.5px; letter-spacing:.08em; color:var(--tx-3); text-transform:uppercase; white-space:nowrap; overflow:hidden; }
+.meta{ margin-bottom:5px; }
+.meta span:first-child, .foot span:first-child{ flex:1; }
+.meta b, .foot b{ font-weight:400; color:var(--tx-2); }
+.hbar{ display:grid; grid-template-columns:28px minmax(0, 1fr) 22px; align-items:center; }
+.os{ display:grid; justify-items:start; gap:3px; font-size:10px; color:var(--tx-2); letter-spacing:.06em; }
+.os i{ width:4px; height:4px; border-radius:50%; background:var(--teal); margin-left:3px; }
+.bar{ display:flex; align-items:center; justify-content:space-between; gap:12px; min-width:0; height:30px; padding:0 14px;
+  background:var(--bar); border-left:7px solid var(--teal); border-right:7px solid var(--teal); }
+.bar h2{ margin:0; font-family:var(--f-disp); font-weight:400; font-size:19px; letter-spacing:.08em; text-transform:uppercase; color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bar-r{ font-size:10px; letter-spacing:.08em; color:var(--tx-2); white-space:nowrap; text-transform:uppercase; }
+.arr{ justify-self:end; width:0; height:0; border-top:10px solid transparent; border-bottom:10px solid transparent; border-left:12px solid var(--teal); }
+.body{ position:relative; padding:14px 0 0 28px; }
+.foot{ margin-top:14px; padding-top:7px; border-top:1px solid var(--line); margin-left:28px; padding-left:0; }
+.pip{ display:inline-block; width:2px; height:9px; background:var(--teal); margin-right:6px; vertical-align:-1px; }
+.pip.a{ background:var(--amber); } .pip.m{ background:var(--mint); }
+.cx{ position:absolute; font-size:11px; line-height:1; color:var(--tx-3); pointer-events:none; }
+.cx.tl{ top:-2px; left:-12px; } .cx.tr{ top:-2px; right:-12px; } .cx.bl{ bottom:-2px; left:-12px; } .cx.br{ bottom:-2px; right:-12px; }
+
+/* tool row */
+.tools{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:12px; }
+.tag, .tab{ display:inline-flex; align-items:center; height:20px; padding:0 10px; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--tx-2); background:var(--cell-2); border:0; white-space:nowrap; }
+.tag.on{ background:#173A40; color:var(--teal-2); }
+.tab{ cursor:pointer; transition:background .2s, color .2s; }
+.tab:hover{ color:var(--tx); }
+.tab[aria-pressed="true"]{ background:var(--teal); color:#071012; }
+.tab:focus-visible, .play:focus-visible, .lrow:focus-visible{ outline:1px solid var(--teal-2); outline-offset:2px; }
+.src{ flex:1; display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:150px; height:20px; padding:0 8px 0 10px; border:1px solid var(--line-2); font-size:10px; letter-spacing:.08em; color:var(--tx-2); text-transform:uppercase; white-space:nowrap; }
+.tri{ width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:6px solid var(--teal); }
+
+/* ---------- iso panel ---------- */
+.scene{ position:relative; }
+.scene svg{ display:block; width:100%; height:auto; max-width:100%; touch-action:manipulation; }
+.selbar{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; margin-top:6px; padding:7px 10px; background:var(--cell); font-size:11px; letter-spacing:.05em; color:var(--tx-2); text-transform:uppercase; }
+.selbar b{ font-weight:400; color:var(--tx); flex:1; min-width:0; }
+.selbar b em{ font-style:normal; color:var(--teal-2); }
+
+.iso text{ fill:var(--tx); }
+.t-name{ font-family:var(--f-disp); font-size:14.5px; font-weight:600; letter-spacing:.08em; }
+.t-val{ font-family:var(--f-mono); font-size:11.5px; fill:var(--tx-2) !important; }
+.t-pct{ font-family:var(--f-mono); font-size:12px; fill:var(--c) !important; text-anchor:middle; }
+.t-mini{ font-family:var(--f-mono); font-size:9.5px; letter-spacing:.08em; fill:var(--tx-3) !important; }
+.t-dim{ font-family:var(--f-mono); font-size:11px; fill:var(--tx-2) !important; letter-spacing:.04em; }
+.iso.compact .t-name{ font-size:24px; }
+.iso.compact .t-val{ display:none; }
+.iso.compact .t-pct{ font-size:19px; }
+.p-top{ fill:#111518; } .p-l{ fill:#0C0F11; } .p-r{ fill:#090B0D; }
+.p-top, .p-l, .p-r{ stroke:var(--line-2); stroke-width:1; stroke-linejoin:round; }
+.p-grid{ stroke:rgba(47,169,186,.11); stroke-width:1; fill:none; }
+.p-tick{ stroke:var(--tx-3); stroke-width:1; fill:none; }
+.p-socket{ fill:none; stroke:var(--teal); stroke-width:1; stroke-dasharray:2 4; opacity:.55; }
+.frame{ fill:none; stroke:var(--tx-3); stroke-width:1; }
+.guide{ stroke:var(--tx-3); stroke-width:1; stroke-dasharray:4 4; fill:none; }
+.layer{ transition:opacity .25s; cursor:pointer; }
+.g-face{ fill:rgba(47,169,186,.03); stroke:none; }
+.g-edge{ fill:none; stroke:#56636C; stroke-width:1; stroke-dasharray:3 3; stroke-linejoin:round; }
+.f-top{ fill:color-mix(in oklab, var(--c) 24%, var(--bg)); }
+.f-left{ fill:color-mix(in oklab, var(--c) 13%, var(--bg)); }
+.f-right{ fill:color-mix(in oklab, var(--c) 8%, var(--bg)); }
+.f-top, .f-left, .f-right{ stroke:var(--c); stroke-width:1; stroke-linejoin:round; }
+.f-stripe{ pointer-events:none; opacity:.9; transition:opacity .25s; }
+.f-inset{ fill:none; stroke:var(--c); stroke-width:1; opacity:.55; }
+.stripe-ln{ stroke:var(--c); stroke-width:2.4; }
+.dot-pt{ fill:var(--c); }
+.p-face{ stroke:var(--c); stroke-width:1; stroke-dasharray:2 3; stroke-linejoin:round; opacity:.85; }
+.layer.is-hover .f-top{ fill:color-mix(in oklab, var(--c) 40%, var(--bg)); }
+.hit{ fill:transparent; cursor:pointer; }
+.callout{ transition:opacity .25s; cursor:pointer; }
+.leader{ stroke:var(--tx-3); stroke-width:1; fill:none; }
+.c-anchor{ fill:var(--c); }
+.pct-box{ fill:var(--bg); stroke:var(--c); stroke-width:1; }
+.dim path{ stroke:var(--tx-2); stroke-width:1; fill:none; }
+.scan-plane{ fill:rgba(69,200,218,.07); stroke:var(--teal-2); stroke-width:1; }
+.scan-t{ font-family:var(--f-mono); font-size:10px; fill:var(--teal-2) !important; letter-spacing:.08em; }
+.pk{ fill:color-mix(in oklab, var(--mint) 22%, var(--bg)); stroke:var(--mint); stroke-width:1; stroke-linejoin:round; }
+.pk-line{ stroke:var(--mint); stroke-width:1; stroke-dasharray:2 3; opacity:.6; }
+.pk-t{ font-family:var(--f-mono); font-size:12px; fill:var(--mint) !important; }
+.iso.has-hover .layer:not(.is-hover), .iso.has-hover .callout:not(.is-hover){ opacity:.22; }
+
+/* ---------- readout panel ---------- */
+.boxes{ display:grid; grid-template-columns:minmax(84px, 112px) minmax(0, 1fr); gap:10px; }
+.bx{ display:grid; align-content:center; gap:2px; height:70px; padding:0 14px; border:1px solid var(--line-2); background:var(--cell); min-width:0; }
+.bx b{ font-family:var(--f-disp); font-weight:300; font-size:36px; line-height:1; letter-spacing:.04em; color:var(--tx); white-space:nowrap; font-variant-numeric:tabular-nums; }
+.bx-v b{ font-size:clamp(32px, 3.3vw, 42px); }
+.bx-v b.proj{ color:var(--tx-2); }
+.bx small{ font-size:9.5px; letter-spacing:.1em; color:var(--tx-2); text-transform:uppercase; white-space:nowrap; }
+.kv{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px 8px; margin-top:12px; }
+.kh{ display:grid; place-items:center; height:22px; background:var(--bar); font-family:var(--f-disp); font-size:14px; font-weight:500; letter-spacing:.08em; color:var(--tx); }
+.kd{ padding:4px 2px; text-align:center; font-size:13px; color:var(--tx-2); font-variant-numeric:tabular-nums; background:var(--cell); }
+.kd.t{ color:var(--teal-2); } .kd.m{ color:var(--mint); } .kd.r{ color:var(--red); }
+
+.pbs{ display:grid; gap:14px; margin-top:16px; }
+.ruler{ position:relative; height:9px; margin:0 6px 4px;
+  background:repeating-linear-gradient(90deg, var(--tx-3) 0 1px, transparent 1px calc(100% / 30)) left bottom / 100% 5px no-repeat,
+             repeating-linear-gradient(90deg, var(--tx-2) 0 1px, transparent 1px calc(100% / 6)) left bottom / 100% 9px no-repeat; }
+.ruler::before, .ruler::after{ content:""; position:absolute; bottom:-1px; width:3px; height:3px; background:var(--tx-2); }
+.ruler::before{ left:-8px; } .ruler::after{ right:-8px; }
+.pb-bar{ position:relative; height:26px; background:var(--bar-2); overflow:hidden; }
+.pb-fill{ position:absolute; inset:0 auto 0 0; width:0; }
+.pb-fill.teal{ background:repeating-linear-gradient(-45deg, var(--teal) 0 5px, transparent 5px 10px); }
+.pb-fill.mint{ background:repeating-linear-gradient(-45deg, var(--mint) 0 5px, transparent 5px 10px); }
+.pb-fill.ghost{ background:repeating-linear-gradient(-45deg, rgba(47,169,186,.35) 0 2px, transparent 2px 10px); }
+.pb-cut{ position:absolute; top:-3px; bottom:-3px; width:1px; background:var(--tx); }
+.pb-info{ display:flex; flex-wrap:wrap; gap:4px 18px; margin-top:6px; font-size:10px; letter-spacing:.06em; color:var(--tx-2); text-transform:uppercase; font-variant-numeric:tabular-nums; }
+.pb-info b{ font-weight:400; color:var(--tx); }
+.pb-info .sq{ display:inline-block; width:5px; height:5px; background:var(--teal); margin-right:6px; vertical-align:1px; }
+.pb-info .sq.m{ background:var(--mint); }
+.pb-info .st{ margin-left:auto; color:var(--tx-3); }
+.pb-info .st em{ font-style:normal; color:var(--mint); }
+.pb-info .st em.bad{ color:var(--red); }
+
+/* ---------- layer rows ---------- */
+.lrows{ list-style:none; margin:0; padding:0; display:grid; gap:14px; }
+.lrow{ display:grid; grid-template-columns:58px minmax(0, 1fr); gap:12px; align-items:stretch; cursor:pointer; transition:opacity .25s; outline:none; }
+.lrows.has-hover .lrow:not(.is-hover){ opacity:.38; }
+.tile{ position:relative; display:grid; place-items:center; height:58px; background:var(--cell-2); }
+.tile b{ font-family:var(--f-disp); font-weight:400; font-size:30px; letter-spacing:.02em; color:var(--tx); }
+.tile i{ position:absolute; left:6px; right:6px; bottom:0; height:3px; background:var(--c); }
+.lmain{ display:grid; align-content:center; gap:7px; min-width:0; }
+.ltop{ display:flex; align-items:center; gap:10px; font-size:11px; color:var(--tx-2); font-variant-numeric:tabular-nums; min-width:0; }
+.ltop .code{ padding:1px 6px; background:color-mix(in oklab, var(--c) 30%, var(--bg)); color:var(--c); letter-spacing:.06em; }
+.ltop .sv{ color:var(--c); }
+.ltop .cls{ flex:1; min-width:0; text-align:right; letter-spacing:.06em; color:var(--tx-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ltop .cls em{ font-style:normal; color:var(--tx-2); }
+.lbot{ display:grid; grid-template-columns:minmax(0, 132px) minmax(0, 1fr) 34px; gap:10px; align-items:center; }
+.file{ height:24px; display:flex; align-items:center; padding:0 9px; background:var(--cell-2); font-family:var(--f-disp); font-size:14px; font-weight:500; letter-spacing:.06em; color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-transform:uppercase; }
+.sld{ position:relative; height:22px; }
+.sld .tk{ position:absolute; left:0; right:0; top:2px; height:4px; background:repeating-linear-gradient(90deg, var(--tx-3) 0 1px, transparent 1px calc(100% / 20)); }
+.sld .tr{ position:absolute; left:0; right:0; top:10px; height:2px; background:var(--line-2); }
+.sld .fa{ position:absolute; left:0; top:10px; height:2px; background:var(--c); width:0; box-shadow:0 0 6px var(--c); }
+.sld .fp{ position:absolute; top:9px; height:4px; background:repeating-linear-gradient(90deg, var(--c) 0 2px, transparent 2px 4px); opacity:.7; width:0; }
+.sld .mk{ position:absolute; top:14px; width:0; height:0; margin-left:-4px; border-left:4px solid transparent; border-right:4px solid transparent; border-bottom:6px solid var(--tx); }
+.sld .ab{ position:absolute; top:13px; font-size:8.5px; color:var(--tx-3); }
+.sld .ab.a{ left:0; } .sld .ab.b{ right:0; }
+.lbot .pv{ text-align:right; font-size:12px; color:var(--tx); font-variant-numeric:tabular-nums; }
+.lrow.done .pv{ color:var(--mint); }
+
+/* ---------- history ---------- */
+.hhead{ display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin-bottom:6px; }
+.play{ flex:none; width:34px; height:34px; display:grid; place-items:center; border:1px solid var(--teal); background:#0F2A2F; color:var(--teal-2); cursor:pointer; }
+.play .i-pause{ display:none; } .play.on .i-pause{ display:block; } .play.on .i-play{ display:none; }
+.htitle{ display:grid; min-width:0; flex:1; }
+.htitle b{ font-family:var(--f-disp); font-weight:500; font-size:16px; letter-spacing:.08em; }
+.htitle span{ font-size:11px; color:var(--tx-2); letter-spacing:.04em; text-transform:uppercase; font-variant-numeric:tabular-nums; }
+.legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:10px; color:var(--tx-2); letter-spacing:.06em; text-transform:uppercase; }
+.legend span{ display:inline-flex; align-items:center; gap:6px; }
+.legend i{ width:14px; height:10px; background:repeating-linear-gradient(-45deg, var(--teal) 0 2px, transparent 2px 4px); }
+.legend i.p{ background:none; border:1px dashed var(--tx-2); }
+.hist{ position:relative; padding:20px 0 0; }
+.corner{ position:absolute; font-size:9px; color:var(--tx-3); letter-spacing:.06em; }
+.corner.c0{ left:0; top:0; } .corner.c1{ right:0; top:0; }
+.track{ position:relative; height:150px; cursor:ew-resize; touch-action:none; outline:none; }
+.track:focus-visible{ box-shadow:0 0 0 1px var(--teal-2); }
+.wbar{ position:absolute; bottom:0; top:0; padding-inline:3px; transition:opacity .2s; }
+.wbar .col{ position:absolute; inset:0 3px; background:var(--cell); }
+.wbar .stk{ position:absolute; left:3px; right:3px; top:0; bottom:0; display:flex; flex-direction:column-reverse; }
+.wbar s{ display:block; text-decoration:none; background:repeating-linear-gradient(-45deg, var(--c) 0 2.2px, transparent 2.2px 5px); }
+.wbar s.p{ background:none; border:1px dashed color-mix(in oklab, var(--c) 70%, transparent); border-bottom:0; }
+.wbar .flag{ position:absolute; left:50%; width:7px; height:7px; margin-left:-3.5px; background:var(--tx); transform:rotate(45deg); }
+.wbar.future .flag{ background:none; border:1px solid var(--tx-3); }
+.wbar:not(.played){ opacity:.35; }
+.today{ position:absolute; top:-14px; bottom:0; width:0; border-left:1px dashed var(--tx-2); pointer-events:none; }
+.today.near span{ opacity:0; }
+.today span{ position:absolute; top:-4px; right:6px; transition:opacity .2s; font-size:9.5px; color:var(--tx-2); letter-spacing:.08em; white-space:nowrap; }
+.head{ position:absolute; top:-20px; bottom:-6px; width:0; pointer-events:none; }
+.head::before{ content:""; position:absolute; top:14px; bottom:0; left:0; width:1px; background:var(--teal-2); box-shadow:0 0 8px var(--teal-2); }
+.head span{ position:absolute; top:0; left:0; transform:translateX(-50%); padding:1px 6px; background:var(--teal); color:#071012; font-size:10px; letter-spacing:.06em; white-space:nowrap; }
+.months{ position:relative; height:18px; margin-top:6px; border-top:1px solid var(--line-2); font-size:10px; color:var(--tx-3); letter-spacing:.08em; }
+.months span{ position:absolute; top:5px; transform:translateX(-50%); white-space:nowrap; }
+.months span::before{ content:""; position:absolute; top:-6px; left:50%; width:1px; height:4px; background:var(--tx-3); }
+.months span.due{ transform:translateX(-100%); color:var(--tx-2); }
+.months span.due::before{ left:auto; right:0; }
+
+/* ---------- log ---------- */
+.lg-head, .lg-row{ display:grid; grid-template-columns:minmax(0, 1.25fr) minmax(0, 1.5fr) minmax(0, .95fr) minmax(0, .8fr) 70px; gap:8px; align-items:center; }
+.lg-head{ padding:0 10px 6px; font-size:9.5px; letter-spacing:.08em; color:var(--tx-3); text-transform:uppercase; }
+.lg-head .r, .lg-row .r{ text-align:right; }
+.log{ list-style:none; margin:0; padding:0; display:grid; gap:2px; }
+.lg-row{ height:32px; padding:0 10px; font-size:12px; font-variant-numeric:tabular-nums; color:var(--tx); background:var(--cell); white-space:nowrap; }
+.lg-row:nth-child(even){ background:var(--pnl); color:var(--teal-2); }
+.lg-row > span{ overflow:hidden; text-overflow:ellipsis; }
+.lg-row .id small{ color:var(--tx-3); margin-left:6px; }
+.lg-row:nth-child(even) .id small{ color:color-mix(in oklab, var(--teal-2) 50%, var(--bg)); }
+.lg-row .src{ all:unset; font-family:var(--f-disp); font-size:14px; font-weight:500; letter-spacing:.05em; overflow:hidden; text-overflow:ellipsis; }
+.chip{ justify-self:end; display:inline-grid; place-items:center; width:66px; height:16px; font-size:9.5px; letter-spacing:.08em; background:#1F5C3E; color:#BFF5D7; }
+.chip.exp{ background:none; border:1px dashed var(--tx-3); color:var(--tx-2); }
+.lg-row.empty{ color:var(--tx-3) !important; }
+.lg-row.new{ animation:flash .9s ease-out; }
+@keyframes flash{ from{ background:#1C4A50; } }
+.lg-sum{ display:flex; justify-content:space-between; gap:12px; margin-top:10px; padding:8px 10px; border:1px solid var(--line-2); font-size:11px; color:var(--tx-2); letter-spacing:.05em; text-transform:uppercase; font-variant-numeric:tabular-nums; }
+.lg-sum b{ font-weight:400; color:var(--mint); }
+
+/* ---------- brand + dials ---------- */
+.brand{ display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:20px 28px; align-items:end; }
+.wordmark{ display:grid; line-height:.82; font-family:var(--f-disp); font-weight:300; color:var(--mint); letter-spacing:.02em; }
+.wordmark span{ font-size:clamp(64px, 9vw, 124px); }
+.wordmark small{ margin-top:12px; font-family:var(--f-mono); font-size:10.5px; line-height:1.5; letter-spacing:.1em; color:var(--tx-2); }
+.dials{ display:flex; gap:18px; }
+.dial{ display:grid; justify-items:center; gap:6px; }
+.dial svg{ width:84px; height:84px; display:block; }
+.dial .trk{ fill:none; stroke:#183038; stroke-width:3; }
+.dial .arc{ fill:none; stroke:var(--teal); stroke-width:3; stroke-linecap:butt; transform:rotate(-90deg); transform-origin:42px 42px; }
+.dial .core{ fill:#0C1A1F; stroke:#1F4650; stroke-width:1; }
+.dial .ctr{ fill:var(--blue); }
+.dial b{ font-weight:400; font-size:14px; color:var(--tx); font-variant-numeric:tabular-nums; }
+.dial small{ font-size:9.5px; letter-spacing:.1em; color:var(--tx-3); text-transform:uppercase; }
+.keys{ display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:18px; font-size:10.5px; color:var(--tx-2); letter-spacing:.06em; text-transform:uppercase; }
+.keys kbd{ font-family:var(--f-mono); font-size:10px; padding:1px 6px; border:1px solid var(--line-2); color:var(--teal-2); margin-right:5px; }
+
+/* ---------- readme ---------- */
+.readme{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px 34px; }
+.readme div{ display:grid; gap:6px; align-content:start; min-width:0; }
+.readme h3{ margin:0; font-family:var(--f-disp); font-weight:500; font-size:15px; letter-spacing:.1em; text-transform:uppercase; color:var(--teal-2); }
+.readme p{ margin:0; color:var(--tx-2); font-size:12px; line-height:1.6; max-width:56ch; }
+
+/* ---------- responsive ---------- */
+@media (max-width:1120px){
+  .grid{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  #p-iso{ grid-column:1 / 3; grid-row:auto; }
+  #p-read, #p-layers, #p-hist, #p-log, #p-brand, #p-readme{ grid-column:auto; grid-row:auto; }
+  #p-hist, #p-readme{ grid-column:1 / 3; }
+}
+@media (max-width:760px){
+  .grid{ grid-template-columns:minmax(0, 1fr); gap:30px; }
+  #p-iso, #p-hist, #p-readme{ grid-column:auto; }
+  .readme{ grid-template-columns:minmax(0, 1fr); }
+  .brand{ grid-template-columns:minmax(0, 1fr); }
+  .sys-c{ display:none; }
+  .cx{ display:none; }
+}
+@media (max-width:480px){
+  .meta span:nth-child(n+3), .foot span:nth-child(n+3){ display:none; }
+  .body, .meta{ padding-left:0; } .foot{ margin-left:0; }
+  .hbar{ grid-template-columns:minmax(0, 1fr) 18px; }
+  .os{ display:none; }
+  .lbot{ grid-template-columns:minmax(0, 92px) minmax(0, 1fr) 30px; }
+  .file{ font-size:12.5px; }
+  .ltop .cls{ display:none; }
+  .lg-head, .lg-row{ grid-template-columns:minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, .8fr) 62px; }
+  .lg-head .pay, .lg-row .pay{ display:none; }
+  .chip{ width:60px; }
+  .dials{ gap:10px; }
+  .dial svg{ width:72px; height:72px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .live i, .lg-row.new{ animation:none; }
+}
+</style>
+
+<div class="page">
+  <header class="sys">
+    <div class="sys-l"><span class="dot"></span><b>STRATA</b><span>// TAX_VAULT.Q4</span></div>
+    <div class="sys-c">Concept 01 · Isometric data · FUI build</div>
+    <div class="sys-r"><span id="clock">SYS --:--:--</span><span class="live"><i></i>Link</span></div>
+  </header>
+
+  <main class="grid">
+    <!-- ISO -->
+    <section class="pnl" id="p-iso" aria-labelledby="t-iso">
+      <div class="meta"><span>Data. view. <b>ISO</b></span><span>Read. <b>write</b></span><span>X + Y + Z</span></div>
+      <div class="hbar"><span class="os"><i></i>OS</span><div class="bar"><h2 id="t-iso" data-decode>Vault. Q4 — iso</h2><span class="bar-r">Float. terminal</span></div><span class="arr" aria-hidden="true"></span></div>
+      <div class="body">
+        <div class="tools" role="toolbar" aria-label="Stack view">
+          <span class="tag on">On set</span>
+          <button type="button" class="tab" id="v-stacked" aria-pressed="false">Stacked</button>
+          <button type="button" class="tab" id="v-exploded" aria-pressed="true">Exploded</button>
+          <button type="button" class="tab" id="b-scan" aria-pressed="false">Scan</button>
+          <span class="src">Source: vault ••4418 <i class="tri"></i></span>
+        </div>
+        <div class="scene">
+          <span class="cx tl">×</span><span class="cx tr">×</span><span class="cx bl">×</span><span class="cx br">×</span>
+          <svg class="iso" id="iso" viewBox="0 0 600 500" role="img" aria-labelledby="iso-title">
+            <title id="iso-title">Isometric stack of four tax slabs: federal income at the bottom, then self-employment, state estimate and sales tax. Striped fill shows money saved, dashed outline shows what is still to go, dotted fill shows the projection.</title>
+            <defs></defs>
+            <path class="frame" d="M8,24V8H24M576,8H592V24M8,476V492H24M576,492H592V476"/>
+            <text class="t-mini" x="30" y="18">C0</text>
+            <text class="t-mini" x="556" y="18">C1</text>
+            <text class="t-mini" x="570" y="488" text-anchor="end">ISO.30 · 1U = $164 · Z.TGT 150U</text>
+            <g id="g-plat"></g>
+            <g id="g-guides"></g>
+            <g id="g-layers"></g>
+            <g id="g-dim" class="dim"></g>
+            <g id="g-scan"></g>
+            <g id="g-callouts"></g>
+            <g id="g-hits"></g>
+            <g id="g-pk"></g>
+          </svg>
+        </div>
+        <div class="selbar"><span>Sel.</span><b id="sel">Hover a layer</b><span id="zmax">Z.max 265u</span></div>
+      </div>
+      <div class="foot"><span>Data. view. PR</span><span>IP node</span><span><i class="pip"></i>Index</span><span><i class="pip a"></i>Read only V + Z</span></div>
+    </section>
+
+    <!-- READOUT -->
+    <section class="pnl" id="p-read" aria-labelledby="t-read">
+      <div class="meta"><span>Data. view. <b>PR</b></span><span>Read. <b>write</b></span><span>X + Y</span></div>
+      <div class="hbar"><span class="os"><i></i>OS</span><div class="bar"><h2 id="t-read" data-decode>SP_vault. Q4</h2><span class="bar-r">Due: Jan 15</span></div><span class="arr" aria-hidden="true"></span></div>
+      <div class="body">
+        <div class="boxes">
+          <div class="bx"><b>Q4</b><small>FY 2026</small></div>
+          <div class="bx bx-v"><b id="st-total">$12,780</b><small id="st-label">Saved · today Oct 30</small></div>
+        </div>
+        <div class="kv">
+          <span class="kh">TARGET</span><span class="kh">TO GO</span><span class="kh">WEEKS</span><span class="kh">PACE</span>
+          <span class="kd">24,600</span><span class="kd t" id="st-togo">11,820</span><span class="kd" id="st-weeks">11</span><span class="kd m" id="st-pace">+2,006</span>
+        </div>
+        <div class="pbs">
+          <div>
+            <div class="ruler" aria-hidden="true"></div>
+            <div class="pb-bar"><i class="pb-fill ghost" id="pb-proj"></i><i class="pb-fill teal" id="pb-fill"></i><i class="pb-cut" id="pb-cut"></i></div>
+            <div class="pb-info"><span><i class="sq"></i>Vault_fill <b id="pb-fill-v">52%</b></span><span><i class="sq"></i><b id="pb-date">Oct 30</b></span><span class="st">Checksum_ <em id="pb-status">ahead</em></span></div>
+          </div>
+          <div>
+            <div class="ruler" aria-hidden="true"></div>
+            <div class="pb-bar"><i class="pb-fill mint" id="pb-time"></i><i class="pb-cut" id="pb-tcut"></i></div>
+            <div class="pb-info"><span><i class="sq m"></i>Time_elapsed <b id="pb-time-v">44%</b></span><span><i class="sq m"></i>Day <b id="pb-day">060</b>/137</span><span class="st">Rule_ <em>30% / sweep daily</em></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="foot"><span>Data. view. PR</span><span>Output. <b>SPR</b></span><span>Read only V + Z</span></div>
+    </section>
+
+    <!-- LAYERS -->
+    <section class="pnl" id="p-layers" aria-labelledby="t-layers">
+      <div class="meta"><span>Data. view. <b>PR</b></span><span>Read. <b>write</b></span><span>X + Z</span></div>
+      <div class="hbar"><span class="os"><i></i>OS</span><div class="bar"><h2 id="t-layers" data-decode>Code. E — layers</h2><span class="bar-r">Z-sort ↑</span></div><span class="arr" aria-hidden="true"></span></div>
+      <div class="body">
+        <div class="tools"><span class="tag on">On set</span><span class="tag">&lt; 4 layers &gt;</span><span class="tag">Update</span><span class="src">Source: estimates <i class="tri"></i></span></div>
+        <ul class="lrows" id="rows"></ul>
+      </div>
+      <div class="foot"><span>Data. view. PR</span><span><i class="pip"></i>Index</span><span>Read</span></div>
+    </section>
+
+    <!-- HISTORY -->
+    <section class="pnl" id="p-hist" aria-labelledby="t-hist">
+      <div class="meta"><span>Data. view. <b>PR</b></span><span>Time <b>X + Z</b></span><span>Replace match - C</span></div>
+      <div class="hbar"><span class="os"><i></i>OS</span><div class="bar"><h2 id="t-hist" data-decode>Code. C — sweeps</h2><span class="bar-r">W01 → W20</span></div><span class="arr" aria-hidden="true"></span></div>
+      <div class="body">
+        <div class="hhead">
+          <button type="button" class="play" id="play" aria-label="Play the quarter">
+            <svg class="i-play" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1v10l9-5z" fill="currentColor"/></svg>
+            <svg class="i-pause" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1h3v10H2zM7 1h3v10H7z" fill="currentColor"/></svg>
+          </button>
+          <div class="htitle"><b>SWEEP_HISTORY</b><span id="tl-read">W09 · Oct 26 · 1,440 swept</span></div>
+          <div class="legend"><span><i></i>Swept</span><span><i class="p"></i>Projected</span></div>
+        </div>
+        <div class="hist">
+          <span class="corner c0">C0</span><span class="corner c1">C1</span>
+          <div class="track" id="track" tabindex="0" role="slider" aria-label="Scrub through the quarter" aria-valuemin="0" aria-valuemax="137" aria-valuenow="60" aria-valuetext="Oct 30">
+            <div id="bars"></div>
+            <div class="today" id="today"><span>TODAY</span></div>
+            <div class="head" id="playhead"><span id="ph-flag">OCT 30</span></div>
+          </div>
+          <div class="months" id="months"></div>
+        </div>
+      </div>
+      <div class="foot"><span>Connect. <b>F3</b></span><span>Feed. me</span><span><i class="pip a"></i>Index</span><span>Read only V + Z</span></div>
+    </section>
+
+    <!-- LOG -->
+    <section class="pnl" id="p-log" aria-labelledby="t-log">
+      <div class="meta"><span>Data. view. <b>PR</b></span><span>Read. <b>write</b></span><span>X + Y</span></div>
+      <div class="hbar"><span class="os"><i></i>OS</span><div class="bar"><h2 id="t-log" data-decode>Comms. B — sweep log</h2><span class="bar-r">30% rule</span></div><span class="arr" aria-hidden="true"></span></div>
+      <div class="body">
+        <div class="lg-head"><span>TX · date</span><span>Source</span><span class="r pay">Payment</span><span class="r">Swept</span><span class="r">Status</span></div>
+        <ol class="log" id="log"></ol>
+        <div class="lg-sum"><span>Swept to date</span><b id="lg-total">$12,780</b></div>
+      </div>
+      <div class="foot"><span>Data. view. PR</span><span>Call...</span><span>Read only V + Z</span></div>
+    </section>
+
+    <!-- BRAND -->
+    <section class="pnl" id="p-brand" aria-labelledby="t-brand">
+      <div class="meta"><span>Data. view. <b>PR</b></span><span>Link. <b>OV</b></span><span>Read only V + Z</span></div>
+      <div class="hbar"><span class="os"><i></i>OS</span><div class="bar"><h2 id="t-brand" data-decode>Code. C — system</h2><span class="bar-r">Side. attck</span></div><span class="arr" aria-hidden="true"></span></div>
+      <div class="body">
+        <div class="brand">
+          <div class="wordmark"><span>STRATA</span><small>TAX VAULT · ISOMETRIC DATA TERMINAL<br>CONCEPT 01 · REV. OCT 30 2026</small></div>
+          <div class="dials" id="dials"></div>
+        </div>
+        <div class="keys"><span><kbd>E</kbd>Explode</span><span><kbd>Space</kbd>Play</span><span><kbd>← →</kbd>Week</span><span><kbd>T</kbd>Today</span><span><kbd>S</kbd>Scan</span></div>
+      </div>
+      <div class="foot"><span>Data. view. PR</span><span>CRNT_T</span><span>Read only V + Z</span></div>
+    </section>
+
+    <!-- README -->
+    <section class="pnl" id="p-readme" aria-labelledby="t-readme">
+      <div class="meta"><span>Data. view. <b>DOC</b></span><span>Read only</span></div>
+      <div class="hbar"><span class="os"><i></i>OS</span><div class="bar"><h2 id="t-readme">Readme. A</h2><span class="bar-r">3 notes</span></div><span class="arr" aria-hidden="true"></span></div>
+      <div class="body readme">
+        <div><h3>Encoding</h3><p>Slab height is the bill. Striped fill is money already in the vault, the dashed outline is what's left, and dotted fill is the projection from the 30% auto-save rule.</p></div>
+        <div><h3>Interaction</h3><p>Hover a layer row and its slab slides out like a drawer. Press E to explode the stack, S to run a scan. Drag the sweep history or press Space to replay the quarter; the log fills as payments land.</p></div>
+        <div><h3>Style</h3><p>FUI terminal: header bars with teal end caps, tick rulers, striped progress, mono readouts. The iso drawing is generated in JS from one geometry and styled entirely with tokens.</p></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = id => document.getElementById(id);
+
+  /* ---------------- data ---------------- */
+  const DAY = 86400000;
+  const START = Date.UTC(2026, 7, 31);   // Mon Aug 31 2026
+  const T0 = 60 / 7;                      // today, Fri Oct 30
+  const TD = 137 / 7;                     // due, Fri Jan 15
+  const A = [1110, 1650, 930, 2190, 750, 1470, 1920, 1320, 1440];   // weekly sweeps (30% of payments)
+  const PAY = [
+    [1,'NORDVIK LABS',720], [4,'ROWAN & HALE',390], [8,'PALE FIRE MEDIA',1050], [11,'STUDIO KESTREL',600],
+    [16,'BLUE AXIS',930], [22,'NORDVIK LABS',1440], [25,'OKAPI FILMS',750], [30,'ROWAN & HALE',750],
+    [36,'STUDIO KESTREL',870], [39,'PALE FIRE MEDIA',600], [43,'BLUE AXIS',1200], [46,'OKAPI FILMS',720],
+    [50,'NORDVIK LABS',1320], [57,'ROWAN & HALE',840], [59,'STUDIO KESTREL',600],
+  ];
+  const L = [
+    { code:'FD', tag:'FED. INCOME', name:'Fed. income',     short:'FED',   cls:'Federal',   form:'Form 1040-ES', target:12400, saved:5950 },
+    { code:'SE', tag:'SELF-EMPL.', name:'Self-employment', short:'SE',    cls:'Federal',   form:'Schedule SE',  target:5200,  saved:2600 },
+    { code:'CA', tag:'STATE EST.', name:'State estimate',  short:'STATE', cls:'State',     form:'CA 540-ES',    target:4800,  saved:3170 },
+    { code:'SX', tag:'SALES TAX', name:'Sales tax',       short:'SALES', cls:'3 states',  form:'Sales · Jan 31', target:2200, saved:1060 },
+  ];
+  const TOTAL = L.reduce((s, l) => s + l.target, 0);
+  const SAVED = L.reduce((s, l) => s + l.saved, 0);
+  const share = L.map(l => l.saved / SAVED);
+  const RUN = (TOTAL - SAVED) / 11;
+
+  const n$ = v => Math.round(v).toLocaleString('en-US');
+  const fmt$ = v => '$' + n$(v);
+  const dateAt = t => new Date(START + Math.round(t * 7) * DAY);
+  const fmtD = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric', timeZone:'UTC' }).toUpperCase();
+
+  const EVENTS = PAY.map(([d, c, s], i) => ({ id:391 + i, day:d, src:c, gross:s / 0.3, swept:s, proj:false }));
+  for (let j = 0; j < 11; j++) EVENTS.push({ id:391 + PAY.length + j, day:63 + 7 * j, src:'RUN RATE · EST.', gross:RUN / 0.3, swept:RUN, proj:true });
+
+  function cumA(t){
+    t = Math.max(0, Math.min(t, T0));
+    let s = 0;
+    for (let k = 0; k < A.length; k++){
+      const a = k, b = k === A.length - 1 ? T0 : k + 1;
+      if (t >= b) s += A[k];
+      else { if (t > a) s += A[k] * (t - a) / (b - a); break; }
+    }
+    return s;
+  }
+  function layerAt(i, t){
+    if (t <= T0){ const v = share[i] * cumA(t); return { act:v, all:v }; }
+    const f = Math.min(1, (t - T0) / (TD - T0));
+    return { act:L[i].saved, all:L[i].saved + (L[i].target - L[i].saved) * f };
+  }
+  const NW = Math.ceil(TD);
+  const WEEKS = [];
+  for (let k = 0; k < NW; k++){
+    const a = k, b = Math.min(k + 1, TD);
+    const actTot = cumA(b) - cumA(a);
+    const pa = Math.max(a, T0), pb = Math.min(b, TD);
+    const pf = pb > pa ? (pb - pa) / (TD - T0) : 0;
+    WEEKS.push({ a, b, act:L.map((_, i) => actTot * share[i]), proj:L.map(l => (l.target - l.saved) * pf) });
+  }
+  const wkTotal = w => w.act.reduce((s, v) => s + v, 0) + w.proj.reduce((s, v) => s + v, 0);
+
+  /* ---------------- iso geometry ---------------- */
+  const S = 1.1, CX = 196, CY = 384, C30 = 0.8660254;
+  const HT = 150, SEAM = 3, GAP = 30, LIFT = 16, FX = 45, FW = 90;
+  const H = L.map(l => l.target / TOTAL * HT);
+  const P = (x, y, z) => [CX + (x - y) * C30 * S, CY + (x + y - 180) * 0.5 * S - z * S];
+  const p = (x, y, z) => { const q = P(x, y, z); return q[0].toFixed(1) + ',' + q[1].toFixed(1); };
+  const pts = arr => arr.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ');
+  function box(x0, y0, z0, w, d, h){
+    const x1 = x0 + w, y1 = y0 + d, z1 = z0 + h;
+    return {
+      top:   [P(x0,y0,z1), P(x1,y0,z1), P(x1,y1,z1), P(x0,y1,z1)],
+      right: [P(x1,y0,z0), P(x1,y1,z0), P(x1,y1,z1), P(x1,y0,z1)],
+      left:  [P(x0,y1,z0), P(x1,y1,z0), P(x1,y1,z1), P(x0,y1,z1)],
+      hull:  [P(x0,y0,z1), P(x1,y0,z1), P(x1,y0,z0), P(x1,y1,z0), P(x0,y1,z0), P(x0,y1,z1)],
+    };
+  }
+  const mk = (tag, attrs, parent) => {
+    const n = document.createElementNS(NS, tag);
+    if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+
+  const svg = $('iso');
+  const defs = svg.querySelector('defs');
+  L.forEach((_, i) => {
+    const st = mk('pattern', { id:'stripe-' + i, width:6, height:6, patternUnits:'userSpaceOnUse', patternTransform:'rotate(45)', style:`--c:var(--L${i+1})` }, defs);
+    mk('line', { x1:1.2, y1:0, x2:1.2, y2:6, class:'stripe-ln' }, st);
+    const dt = mk('pattern', { id:'dots-' + i, width:5, height:5, patternUnits:'userSpaceOnUse', style:`--c:var(--L${i+1})` }, defs);
+    mk('circle', { cx:1.5, cy:1.5, r:.9, class:'dot-pt' }, dt);
+  });
+
+  // platform
+  const gPlat = $('g-plat');
+  const pb = box(0, 0, -10, 180, 180, 10);
+  mk('polygon', { class:'p-l', points:pts(pb.left) }, gPlat);
+  mk('polygon', { class:'p-r', points:pts(pb.right) }, gPlat);
+  mk('polygon', { class:'p-top', points:pts(pb.top) }, gPlat);
+  let gd = '';
+  for (let k = 15; k < 180; k += 15) gd += `M${p(k,0,0)}L${p(k,180,0)}M${p(0,k,0)}L${p(180,k,0)}`;
+  mk('path', { class:'p-grid', d:gd }, gPlat);
+  let td = '';
+  for (let k = 0; k <= 180; k += 15){
+    const big = k % 45 === 0 ? 6 : 3;
+    td += `M${p(k,180,-10)}L${p(k,180 + big,-10)}M${p(180,k,-10)}L${p(180 + big,k,-10)}`;
+  }
+  mk('path', { class:'p-tick', d:td }, gPlat);
+  mk('polygon', { class:'p-socket', points:pts([P(38,38,0), P(142,38,0), P(142,142,0), P(38,142,0)]) }, gPlat);
+  [[0,180,'A'], [180,180,'0'], [180,0,'B']].forEach(([x, y, s]) => {
+    const q = P(x + (x ? 14 : -14), y + (y ? 14 : -14), -10);
+    const t = mk('text', { class:'t-mini', x:q[0].toFixed(1), y:(q[1] + 4).toFixed(1), 'text-anchor':'middle' }, gPlat); t.textContent = s;
+  });
+
+  const gGuides = $('g-guides');
+  const guide = mk('path', { class:'guide' }, gGuides);
+
+  // layers + callouts
+  const gLayers = $('g-layers'), gCall = $('g-callouts'), gHits = $('g-hits');
+  const LAY = L.map((l, i) => {
+    const o = {};
+    o.g = mk('g', { class:'layer', 'data-i':i, style:`--c:var(--L${i+1})` }, gLayers);
+    o.gT = mk('polygon', { class:'g-face' }, o.g);
+    o.gR = mk('polygon', { class:'g-face' }, o.g);
+    o.gL = mk('polygon', { class:'g-face' }, o.g);
+    o.gBack = mk('path', { class:'g-edge' }, o.g);
+    o.solid = mk('g', {}, o.g);
+    o.sL = mk('polygon', { class:'f-left' }, o.solid);
+    o.sR = mk('polygon', { class:'f-right' }, o.solid);
+    o.sT = mk('polygon', { class:'f-top' }, o.solid);
+    o.stL = mk('polygon', { class:'f-stripe', fill:`url(#stripe-${i})` }, o.solid);
+    o.stR = mk('polygon', { class:'f-stripe', fill:`url(#stripe-${i})` }, o.solid);
+    o.sIn = mk('polygon', { class:'f-inset' }, o.solid);
+    o.proj = mk('g', {}, o.g);
+    o.pL = mk('polygon', { class:'p-face', fill:`url(#dots-${i})` }, o.proj);
+    o.pR = mk('polygon', { class:'p-face', fill:`url(#dots-${i})` }, o.proj);
+    o.pT = mk('polygon', { class:'p-face', fill:`url(#dots-${i})` }, o.proj);
+    o.gFront = mk('path', { class:'g-edge' }, o.g);
+
+    o.c = mk('g', { class:'callout', 'data-i':i, style:`--c:var(--L${i+1})` }, gCall);
+    o.cLine = mk('path', { class:'leader' }, o.c);
+    o.cAnc = mk('rect', { class:'c-anchor', width:5, height:5 }, o.c);
+    o.cBox = mk('rect', { class:'pct-box' }, o.c);
+    o.cPct = mk('text', { class:'t-pct' }, o.c);
+    o.cName = mk('text', { class:'t-name' }, o.c);
+    o.cVal = mk('text', { class:'t-val' }, o.c);
+    o.hit = mk('polygon', { class:'hit', 'data-i':i }, gHits);
+    o.txt = {};
+    return o;
+  });
+
+  const gDim = $('g-dim');
+  const dimPath = mk('path', {}, gDim);
+  const dimText = mk('text', { class:'t-dim', 'text-anchor':'middle' }, gDim);
+  dimText.textContent = '24,600 USD';
+
+  const gScan = $('g-scan');
+  const scanPoly = mk('polygon', { class:'scan-plane' }, gScan);
+  const scanText = mk('text', { class:'scan-t' }, gScan);
+
+  const gPk = $('g-pk');
+  const PK = [0,1,2].map(() => {
+    const g = mk('g', { opacity:0 }, gPk);
+    return { g, line:mk('path', { class:'pk-line' }, g), l:mk('polygon', { class:'pk' }, g), r:mk('polygon', { class:'pk' }, g), t:mk('polygon', { class:'pk' }, g),
+             label:mk('text', { class:'pk-t' }, g), live:false, p:0, amount:0 };
+  });
+
+  /* ---------------- DOM: layers, history, log, dials ---------------- */
+  const rowsEl = $('rows');
+  const ROWS = L.map((l, i) => {
+    const li = document.createElement('li');
+    li.className = 'lrow'; li.tabIndex = 0; li.dataset.i = i;
+    li.style.setProperty('--c', `var(--L${i+1})`);
+    li.innerHTML = `
+      <div class="tile" aria-hidden="true"><b>${l.code}</b><i></i></div>
+      <div class="lmain">
+        <div class="ltop"><span class="code">L${i+1}</span><span class="sv"></span><span>/ ${n$(l.target)}</span><span class="cls">CLASS. <em>${l.cls.toUpperCase()}</em></span></div>
+        <div class="lbot"><span class="file">${l.form}</span>
+          <div class="sld" aria-hidden="true"><i class="tk"></i><i class="tr"></i><i class="fa"></i><i class="fp"></i><i class="mk"></i><span class="ab a">A</span><span class="ab b">B</span></div>
+          <span class="pv"></span></div>
+      </div>`;
+    li.setAttribute('aria-label', `${l.name}, ${l.form}`);
+    rowsEl.appendChild(li);
+    return { li, sv:li.querySelector('.sv'), fa:li.querySelector('.fa'), fp:li.querySelector('.fp'), mk:li.querySelector('.mk'), pv:li.querySelector('.pv'), txt:{} };
+  });
+
+  const barsEl = $('bars');
+  const maxW = Math.max(...WEEKS.map(wkTotal));
+  const scaleMax = Math.ceil(maxW / 500) * 500;
+  const WB = WEEKS.map((w, k) => {
+    const d = document.createElement('div');
+    d.className = 'wbar' + (w.a >= T0 ? ' future' : '');
+    d.style.left = (w.a / TD * 100) + '%';
+    d.style.width = ((w.b - w.a) / TD * 100) + '%';
+    const col = document.createElement('i'); col.className = 'col'; d.appendChild(col);
+    const stk = document.createElement('div'); stk.className = 'stk'; d.appendChild(stk);
+    const segs = [];
+    L.forEach((_, i) => { if (w.act[i] > .5) segs.push(['', i, w.act[i]]); });
+    L.forEach((_, i) => { if (w.proj[i] > .5) segs.push(['p', i, w.proj[i]]); });
+    segs.forEach(([c, i, v]) => {
+      const s = document.createElement('s'); if (c) s.className = c;
+      s.style.setProperty('--c', `var(--L${i+1})`);
+      s.style.height = (v / scaleMax * 100).toFixed(2) + '%';
+      stk.appendChild(s);
+    });
+    const flag = document.createElement('i'); flag.className = 'flag';
+    flag.style.bottom = `calc(${(wkTotal(w) / scaleMax * 100).toFixed(2)}% + 6px)`;
+    d.appendChild(flag);
+    barsEl.appendChild(d);
+    return d;
+  });
+  $('today').style.left = (T0 / TD * 100) + '%';
+  const monthsEl = $('months');
+  [['SEP', 1], ['OCT', 31], ['NOV', 62], ['DEC', 92]].forEach(([m, dd]) => {
+    const s = document.createElement('span'); s.textContent = m; s.style.left = (dd / 7 / TD * 100) + '%'; monthsEl.appendChild(s);
+  });
+  const due = document.createElement('span'); due.className = 'due'; due.textContent = 'DUE JAN 15'; due.style.left = '100%'; monthsEl.appendChild(due);
+
+  const logEl = $('log');
+  const LOGN = 10;
+  const LOGROWS = Array.from({ length:LOGN }, () => {
+    const li = document.createElement('li'); li.className = 'lg-row';
+    li.innerHTML = '<span class="id"></span><span class="src"></span><span class="r pay"></span><span class="r sw"></span><span class="chip"></span>';
+    logEl.appendChild(li);
+    return { li, id:li.querySelector('.id'), src:li.querySelector('.src'), pay:li.querySelector('.pay'), sw:li.querySelector('.sw'), chip:li.querySelector('.chip'), key:null };
+  });
+
+  const dialsEl = $('dials');
+  const DIALS = [['RATE', '%'], ['DAYS', ''], ['COVER', '%']].map(([lab, unit]) => {
+    const d = document.createElement('div'); d.className = 'dial';
+    d.innerHTML = `<svg viewBox="0 0 84 84" aria-hidden="true">
+      <circle class="trk" cx="42" cy="42" r="36"/><circle class="arc" cx="42" cy="42" r="36" stroke-dasharray="0 999"/>
+      <circle class="core" cx="42" cy="42" r="24"/><circle class="ctr" cx="42" cy="42" r="7"/>
+      <path d="M42 2v5M42 77v5M2 42h5M77 42h5" stroke="#4D565D" stroke-width="1"/></svg><b></b><small>${lab}</small>`;
+    dialsEl.appendChild(d);
+    return { arc:d.querySelector('.arc'), b:d.querySelector('b'), unit, last:null };
+  });
+  const CIRC = 2 * Math.PI * 36;
+  function setDial(dl, frac, label){
+    if (dl.last === label) return; dl.last = label;
+    dl.arc.setAttribute('stroke-dasharray', `${(CIRC * Math.max(0, Math.min(1, frac))).toFixed(1)} 999`);
+    dl.b.textContent = label;
+  }
+
+  /* ---------------- state ---------------- */
+  const st = {
+    t:T0, tTarget:T0, playing:false, dragging:false,
+    e:{ x:0, v:0 }, eTarget:1,
+    dx:L.map(() => ({ x:0, v:0 })),
+    hover:-1, compact:false, lastWeek:-1,
+    scan:-1, newest:null,
+  };
+  function spring(s, target, dt, k = 170, c = 19){
+    if (reduce){ s.x = target; s.v = 0; return true; }
+    const a = k * (target - s.x) - c * s.v;
+    s.v += a * dt; s.x += s.v * dt;
+    if (Math.abs(target - s.x) < 5e-4 && Math.abs(s.v) < 5e-3){ s.x = target; s.v = 0; return true; }
+    return false;
+  }
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  const setTxt = (cache, key, node, val) => { if (cache[key] !== val){ cache[key] = val; node.textContent = val; } };
+  const show = (node, on) => { node.style.display = on ? '' : 'none'; };
+
+  /* ---------------- render ---------------- */
+  let lastTop = 159;
+  function render(){
+    const e = st.e.x, t = st.t;
+    const vals = L.map((_, i) => layerAt(i, t));
+    const zs = []; let z = LIFT * e;
+    for (let i = 0; i < L.length; i++){ zs[i] = z; z += H[i] + SEAM + (i < L.length - 1 ? GAP * e : 0); }
+    const top = z - SEAM; lastTop = top;
+
+    guide.setAttribute('d', `M${p(FX,FX+FW,0)}L${p(FX,FX+FW,top + 12)}M${p(FX+FW,FX+FW,0)}L${p(FX+FW,FX+FW,top + 12)}M${p(FX+FW,FX,0)}L${p(FX+FW,FX,top + 12)}`);
+    guide.style.opacity = clamp01(e * 1.4 - 0.2);
+
+    const co = clamp01((e - 0.55) / 0.45);
+    const LX = 392;
+    L.forEach((l, i) => {
+      const o = LAY[i];
+      const x0 = FX + st.dx[i].x, y0 = FX, w = FW, d = FW, z0 = zs[i], h = H[i];
+      const x1 = x0 + w, y1 = y0 + d, z1 = z0 + h;
+      const fs = vals[i].act / l.target, fa = vals[i].all / l.target;
+      const hs = h * fs, hp = h * fa, full = hp >= h - 0.15;
+      const G = box(x0, y0, z0, w, d, h);
+      o.gT.setAttribute('points', pts(G.top)); o.gR.setAttribute('points', pts(G.right)); o.gL.setAttribute('points', pts(G.left));
+      o.gBack.setAttribute('d', full ? '' : `M${p(x0,y1,z0)}L${p(x0,y1,z1)}L${p(x0,y0,z1)}L${p(x1,y0,z1)}L${p(x1,y0,z0)}M${p(x0,y1,z0)}L${p(x1,y1,z0)}L${p(x1,y0,z0)}`);
+      o.gFront.setAttribute('d', full ? '' : `M${p(x0,y1,z1)}L${p(x1,y1,z1)}L${p(x1,y0,z1)}M${p(x1,y1,z0 + hp)}L${p(x1,y1,z1)}`);
+      if (hs > 0.15){
+        const B = box(x0, y0, z0, w, d, hs);
+        o.sL.setAttribute('points', pts(B.left)); o.sR.setAttribute('points', pts(B.right)); o.sT.setAttribute('points', pts(B.top));
+        o.stL.setAttribute('points', pts(B.left)); o.stR.setAttribute('points', pts(B.right));
+        o.sIn.setAttribute('points', pts([P(x0 + 10, y0 + 10, z0 + hs), P(x1 - 10, y0 + 10, z0 + hs), P(x1 - 10, y1 - 10, z0 + hs), P(x0 + 10, y1 - 10, z0 + hs)]));
+        show(o.solid, true);
+      } else show(o.solid, false);
+      if (hp - hs > 0.15){
+        const B = box(x0, y0, z0 + hs, w, d, hp - hs);
+        o.pL.setAttribute('points', pts(B.left)); o.pR.setAttribute('points', pts(B.right)); o.pT.setAttribute('points', pts(B.top));
+        show(o.proj, true);
+      } else show(o.proj, false);
+      o.hit.setAttribute('points', pts(box(FX, y0, z0, w + 14, d, h + SEAM).hull));
+
+      // callout
+      const an = P(x1, y0 + 17, z0 + h / 2), ay = an[1];
+      o.c.style.opacity = co;
+      o.c.style.pointerEvents = co > 0.5 ? '' : 'none';
+      o.cLine.setAttribute('d', `M${an[0].toFixed(1)},${ay.toFixed(1)}H${LX - 4}M${LX - 4},${(ay - 5).toFixed(1)}V${(ay + 5).toFixed(1)}`);
+      o.cAnc.setAttribute('x', (an[0] - 2.5).toFixed(1)); o.cAnc.setAttribute('y', (ay - 2.5).toFixed(1));
+      const pct = Math.round(fa * 100);
+      const bw = st.compact ? 64 : 42, bh = st.compact ? 30 : 20;
+      o.cBox.setAttribute('x', LX + 2); o.cBox.setAttribute('y', (ay - bh / 2).toFixed(1)); o.cBox.setAttribute('width', bw); o.cBox.setAttribute('height', bh);
+      o.cPct.setAttribute('x', LX + 2 + bw / 2); o.cPct.setAttribute('y', (ay + (st.compact ? 6.5 : 4)).toFixed(1));
+      o.cName.setAttribute('x', LX + bw + 12); o.cName.setAttribute('y', (st.compact ? ay + 8 : ay - 3).toFixed(1));
+      o.cVal.setAttribute('x', LX + bw + 12); o.cVal.setAttribute('y', (ay + 12).toFixed(1));
+      setTxt(o.txt, 'p', o.cPct, pct + '%');
+      setTxt(o.txt, 'n', o.cName, st.compact ? l.short : `L${i+1} · ${l.tag}`);
+      setTxt(o.txt, 'v', o.cVal, `${n$(vals[i].all)} / ${n$(l.target)} USD`);
+    });
+
+    // dimension line (stacked)
+    const dy = FX + FW + 20;
+    const a0 = P(FX, dy, 0), a1 = P(FX, dy, top);
+    dimPath.setAttribute('d',
+      `M${p(FX, FX+FW+4, 0)}L${p(FX, dy+5, 0)}M${p(FX, FX+FW+4, top)}L${p(FX, dy+5, top)}` +
+      `M${a0[0].toFixed(1)},${a0[1].toFixed(1)}L${a1[0].toFixed(1)},${a1[1].toFixed(1)}` +
+      `M${(a0[0]-3).toFixed(1)},${(a0[1]+3).toFixed(1)}L${(a0[0]+3).toFixed(1)},${(a0[1]-3).toFixed(1)}` +
+      `M${(a1[0]-3).toFixed(1)},${(a1[1]+3).toFixed(1)}L${(a1[0]+3).toFixed(1)},${(a1[1]-3).toFixed(1)}`);
+    dimText.setAttribute('transform', `translate(${(a0[0] - 9).toFixed(1)},${((a0[1] + a1[1]) / 2).toFixed(1)}) rotate(-90)`);
+    gDim.style.opacity = clamp01(1 - e * 1.8);
+
+    // scan plane
+    if (st.scan >= 0){
+      const ph = st.scan;
+      const zsn = (ph < 0.5 ? ph * 2 : 2 - ph * 2) * (top + 10);
+      scanPoly.setAttribute('points', pts([P(34,34,zsn), P(146,34,zsn), P(146,146,zsn), P(34,146,zsn)]));
+      const lq = P(146, 34, zsn);
+      scanText.setAttribute('x', (lq[0] + 8).toFixed(1)); scanText.setAttribute('y', (lq[1] + 3).toFixed(1));
+      scanText.textContent = `SCAN Z=${String(Math.round(zsn)).padStart(3, '0')}`;
+      gScan.style.opacity = Math.sin(Math.PI * Math.min(1, ph * 1.02)) * 0.95 + 0.05;
+    } else gScan.style.opacity = 0;
+
+    // packets
+    PK.forEach(k => {
+      if (!k.live){ k.g.setAttribute('opacity', 0); return; }
+      const fall = Math.min(1, k.p / 0.5), after = Math.max(0, k.p - 0.5) / 0.5;
+      const zc = top + 2 + 130 * (1 - fall * fall);
+      const s = 7, x0 = 90 - s / 2, y0 = 90 - s / 2;
+      const B = box(x0, y0, zc, s, s, s);
+      k.l.setAttribute('points', pts(B.left)); k.r.setAttribute('points', pts(B.right)); k.t.setAttribute('points', pts(B.top));
+      k.line.setAttribute('d', `M${p(90,90,top + 140)}L${p(90,90,zc + s)}`);
+      const q = P(90 + s, 90, zc + s);
+      k.label.setAttribute('x', (q[0] + 10).toFixed(1)); k.label.setAttribute('y', (q[1] - after * 16).toFixed(1));
+      k.label.textContent = '+' + n$(k.amount);
+      k.label.style.opacity = fall < 1 ? 0 : 1;
+      k.g.setAttribute('opacity', (fall < 1 ? 1 : 1 - after).toFixed(3));
+    });
+
+    $('zmax').textContent = `Z.max ${Math.round(top)}u`;
+    renderUI(vals);
+  }
+
+  const UI = {};
+  function renderUI(vals){
+    const t = st.t;
+    const all = vals.reduce((s, v) => s + v.all, 0);
+    const atToday = Math.abs(t - T0) < 0.03, future = t > T0 + 0.03;
+    setTxt(UI, 'label', $('st-label'), atToday ? 'Saved · today Oct 30' : future ? `Projected · ${fmtD(dateAt(t))}` : `Saved · ${fmtD(dateAt(t))}`);
+    setTxt(UI, 'total', $('st-total'), fmt$(all));
+    $('st-total').classList.toggle('proj', future);
+    setTxt(UI, 'togo', $('st-togo'), n$(Math.max(0, TOTAL - all)));
+    const wl = TD - t;
+    setTxt(UI, 'weeks', $('st-weeks'), wl < 0.1 ? 'DUE' : wl < 1 ? `${Math.max(1, Math.round(wl * 7))}D` : String(Math.round(wl)));
+    const diff = all - TOTAL * t / TD;
+    const paceEl = $('st-pace');
+    setTxt(UI, 'pace', paceEl, Math.abs(diff) < 60 ? 'ON PACE' : (diff > 0 ? '+' : '−') + n$(Math.abs(diff)));
+    paceEl.className = 'kd ' + (diff <= -60 ? 'r' : 'm');
+
+    const fill = all / TOTAL, actFill = vals.reduce((s, v) => s + v.act, 0) / TOTAL, el = t / TD;
+    $('pb-fill').style.width = (actFill * 100) + '%';
+    $('pb-proj').style.width = (fill * 100) + '%';
+    $('pb-cut').style.left = (fill * 100) + '%';
+    $('pb-time').style.width = (el * 100) + '%';
+    $('pb-tcut').style.left = (el * 100) + '%';
+    setTxt(UI, 'fv', $('pb-fill-v'), Math.round(fill * 100) + '%');
+    setTxt(UI, 'tv', $('pb-time-v'), Math.round(el * 100) + '%');
+    setTxt(UI, 'pd', $('pb-date'), fmtD(dateAt(t)));
+    setTxt(UI, 'pday', $('pb-day'), String(Math.round(t * 7)).padStart(3, '0'));
+    const ps = $('pb-status');
+    setTxt(UI, 'ps', ps, Math.abs(diff) < 60 ? 'on_pace' : diff > 0 ? 'ahead' : 'behind');
+    ps.classList.toggle('bad', diff <= -60);
+
+    vals.forEach((v, i) => {
+      const r = ROWS[i], l = L[i];
+      const fa = v.act / l.target, fp = v.all / l.target;
+      r.fa.style.width = (fa * 100) + '%';
+      r.fp.style.left = (fa * 100) + '%';
+      r.fp.style.width = ((fp - fa) * 100) + '%';
+      r.mk.style.left = (fp * 100) + '%';
+      setTxt(r.txt, 'sv', r.sv, n$(v.all));
+      setTxt(r.txt, 'pv', r.pv, Math.round(fp * 100) + '%');
+      r.li.classList.toggle('done', v.all >= l.target - 0.5);
+    });
+
+    // history
+    $('playhead').style.left = (t / TD * 100) + '%';
+    $('today').classList.toggle('near', Math.abs(t - T0) < 1.4);
+    setTxt(UI, 'flag', $('ph-flag'), fmtD(dateAt(t)));
+    WB.forEach((b, j) => b.classList.toggle('played', WEEKS[j].a < t - 1e-6 || (j === 0 && t > 0.001)));
+    const k = Math.max(0, Math.min(NW - 1, Math.floor(t - 1e-6)));
+    const w = WEEKS[k];
+    const wa = w.act.reduce((s, v) => s + v, 0), wp = w.proj.reduce((s, v) => s + v, 0);
+    let read = `W${String(k + 1).padStart(2, '0')} · ${fmtD(dateAt(k))} · `;
+    read += wa > 0 && wp > 0 ? `${n$(wa)} swept · ~${n$(wp)} exp.` : wa > 0 ? `${n$(wa)} swept` : `~${n$(wp)} projected`;
+    setTxt(UI, 'read', $('tl-read'), read);
+    const days = Math.round(t * 7);
+    if (UI.days !== days){
+      UI.days = days;
+      const tr = $('track');
+      tr.setAttribute('aria-valuenow', days);
+      tr.setAttribute('aria-valuetext', `${fmtD(dateAt(t))}, ${fmt$(all)} ${future ? 'projected' : 'saved'}`);
+      renderLog(t);
+    }
+
+    // dials
+    setDial(DIALS[0], 0.30, '30%');
+    const dl = Math.max(0, Math.round((TD - t) * 7));
+    setDial(DIALS[1], dl / 137, String(dl).padStart(3, '0'));
+    setDial(DIALS[2], fill, Math.round(fill * 100) + '%');
+  }
+
+  function renderLog(t){
+    const vis = EVENTS.filter(ev => ev.day <= t * 7 + 1e-6);
+    const sweptToDate = vis.reduce((s, ev) => s + ev.swept, 0);
+    $('lg-total').textContent = (t > T0 + 0.03 ? '~' : '') + fmt$(sweptToDate);
+    const rows = vis.slice(-LOGN).reverse();
+    const newest = rows[0] ? rows[0].id : null;
+    LOGROWS.forEach((r, i) => {
+      const ev = rows[i];
+      const key = ev ? ev.id : 'e' + i;
+      if (r.key === key) return;
+      r.key = key;
+      if (!ev){
+        r.li.classList.add('empty');
+        r.id.innerHTML = 'TX·----'; r.src.textContent = '· · ·'; r.pay.textContent = '—'; r.sw.textContent = '—';
+        r.chip.textContent = 'IDLE'; r.chip.className = 'chip exp';
+        return;
+      }
+      r.li.classList.remove('empty');
+      r.id.innerHTML = `TX·${String(ev.id).padStart(4, '0')}<small>${fmtD(new Date(START + ev.day * DAY))}</small>`;
+      r.src.textContent = ev.src;
+      r.pay.textContent = (ev.proj ? '~' : '+') + n$(ev.gross);
+      r.sw.textContent = (ev.proj ? '~' : '') + n$(ev.swept);
+      r.chip.textContent = ev.proj ? 'EXPECTED' : 'SWEPT';
+      r.chip.className = 'chip' + (ev.proj ? ' exp' : '');
+    });
+    if (newest !== null && st.newest !== null && newest > st.newest && !reduce){
+      const li = LOGROWS[0].li; li.classList.remove('new'); void li.offsetWidth; li.classList.add('new');
+    }
+    st.newest = newest;
+  }
+
+  /* ---------------- loop ---------------- */
+  let running = false, last = 0;
+  function kick(){ if (!running){ running = true; last = performance.now(); requestAnimationFrame(frame); } }
+  function frame(now){
+    const dt = Math.min(1 / 30, Math.max(0.001, (now - last) / 1000)); last = now;
+    let busy = false;
+    if (st.playing){
+      st.tTarget = Math.min(TD, st.tTarget + dt * TD / 8);
+      st.t = st.tTarget;
+      const wk = Math.floor(st.t);
+      if (wk !== st.lastWeek && st.lastWeek >= 0) dropPacket(wkTotal(WEEKS[Math.min(NW - 1, st.lastWeek)]));
+      st.lastWeek = wk;
+      if (st.t >= TD) setPlaying(false);
+      busy = true;
+    } else if (Math.abs(st.tTarget - st.t) > 1e-4){
+      st.t += (st.tTarget - st.t) * (reduce ? 1 : Math.min(1, dt * 12));
+      busy = true;
+    } else st.t = st.tTarget;
+    if (!spring(st.e, st.eTarget, dt)) busy = true;
+    st.dx.forEach((s, i) => { if (!spring(s, st.hover === i ? 14 : 0, dt, 260, 24)) busy = true; });
+    PK.forEach(k => { if (k.live){ k.p += dt; if (k.p >= 1) k.live = false; busy = true; } });
+    if (st.scan >= 0){ st.scan += dt / 1.8; if (st.scan >= 1){ st.scan = -1; $('b-scan').setAttribute('aria-pressed', 'false'); } busy = true; }
+    render();
+    if (busy) requestAnimationFrame(frame); else running = false;
+  }
+  function dropPacket(amount){
+    if (reduce || amount < 1) return;
+    const k = PK.find(k => !k.live) || PK[0];
+    k.live = true; k.p = 0; k.amount = amount;
+  }
+  function runScan(){
+    if (reduce) return;
+    st.scan = 0; $('b-scan').setAttribute('aria-pressed', 'true'); kick();
+  }
+
+  /* ---------------- controls ---------------- */
+  function setExplode(v){
+    st.eTarget = v ? 1 : 0;
+    $('v-exploded').setAttribute('aria-pressed', v ? 'true' : 'false');
+    $('v-stacked').setAttribute('aria-pressed', v ? 'false' : 'true');
+    kick();
+  }
+  $('v-exploded').addEventListener('click', () => setExplode(true));
+  $('v-stacked').addEventListener('click', () => setExplode(false));
+  $('b-scan').addEventListener('click', runScan);
+
+  function setHover(i){
+    if (st.hover === i) return;
+    st.hover = i;
+    svg.classList.toggle('has-hover', i >= 0);
+    rowsEl.classList.toggle('has-hover', i >= 0);
+    LAY.forEach((o, j) => { o.g.classList.toggle('is-hover', j === i); o.c.classList.toggle('is-hover', j === i); });
+    ROWS.forEach((r, j) => r.li.classList.toggle('is-hover', j === i));
+    const sel = $('sel');
+    if (i < 0) sel.textContent = 'Hover a layer';
+    else {
+      const v = layerAt(i, st.t), l = L[i];
+      sel.innerHTML = `<em>L${i+1} · ${l.code}</em> ${l.name.toUpperCase()} · ${l.form.toUpperCase()} · ${n$(v.all)} / ${n$(l.target)}`;
+    }
+    kick();
+  }
+  ROWS.forEach((r, i) => {
+    r.li.addEventListener('pointerenter', () => setHover(i));
+    r.li.addEventListener('pointerleave', () => setHover(-1));
+    r.li.addEventListener('focus', () => setHover(i));
+    r.li.addEventListener('blur', () => setHover(-1));
+  });
+  LAY.forEach((o, i) => [o.hit, o.c].forEach(n => {
+    n.addEventListener('pointerenter', () => setHover(i));
+    n.addEventListener('pointerleave', () => setHover(-1));
+  }));
+
+  const track = $('track');
+  const tFromX = x => { const r = track.getBoundingClientRect(); return clamp01((x - r.left) / r.width) * TD; };
+  track.addEventListener('pointerdown', ev => {
+    setPlaying(false); st.dragging = true; track.setPointerCapture(ev.pointerId);
+    st.tTarget = tFromX(ev.clientX); kick();
+  });
+  track.addEventListener('pointermove', ev => { if (st.dragging){ st.tTarget = tFromX(ev.clientX); st.t = st.tTarget; kick(); } });
+  const endDrag = () => { st.dragging = false; };
+  track.addEventListener('pointerup', endDrag); track.addEventListener('pointercancel', endDrag);
+  function stepWeek(dir){
+    setPlaying(false);
+    st.tTarget = dir > 0 ? Math.min(TD, Math.floor(st.tTarget + 1e-6) + 1) : Math.max(0, Math.ceil(st.tTarget - 1e-6) - 1);
+    kick();
+  }
+  track.addEventListener('keydown', ev => {
+    if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp'){ ev.preventDefault(); stepWeek(1); }
+    else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown'){ ev.preventDefault(); stepWeek(-1); }
+    else if (ev.key === 'Home'){ ev.preventDefault(); setPlaying(false); st.tTarget = 0; kick(); }
+    else if (ev.key === 'End'){ ev.preventDefault(); setPlaying(false); st.tTarget = TD; kick(); }
+  });
+
+  const playBtn = $('play');
+  function setPlaying(on){
+    if (on){
+      if (st.tTarget >= TD - 0.15){ st.tTarget = 0; st.t = 0; }
+      st.lastWeek = Math.floor(st.t);
+    }
+    st.playing = on;
+    playBtn.classList.toggle('on', on);
+    playBtn.setAttribute('aria-label', on ? 'Pause' : 'Play the quarter');
+    if (on) kick();
+  }
+  playBtn.addEventListener('click', () => setPlaying(!st.playing));
+
+  document.addEventListener('keydown', ev => {
+    if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    const tag = ev.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    const k = ev.key.toLowerCase();
+    if (k === 'e') setExplode(st.eTarget < 0.5);
+    else if (k === 's') runScan();
+    else if (k === 't'){ setPlaying(false); st.tTarget = T0; kick(); }
+    else if (ev.target === track) return;
+    else if (k === ' ' && tag !== 'BUTTON'){ ev.preventDefault(); setPlaying(!st.playing); }
+    else if (k === 'arrowright' && tag !== 'BUTTON'){ stepWeek(1); }
+    else if (k === 'arrowleft' && tag !== 'BUTTON'){ stepWeek(-1); }
+  });
+
+  new ResizeObserver(entries => {
+    const c = entries[0].contentRect.width < 470;
+    if (c !== st.compact){ st.compact = c; svg.classList.toggle('compact', c); LAY.forEach(o => { o.txt = {}; }); kick(); }
+  }).observe(svg);
+
+  // live clock
+  const clock = $('clock');
+  const tick = () => { const d = new Date(); clock.textContent = 'SYS ' + [d.getHours(), d.getMinutes(), d.getSeconds()].map(v => String(v).padStart(2, '0')).join(':'); };
+  tick(); setInterval(tick, 1000);
+
+  // title decode on boot (text stays visible throughout)
+  if (!reduce){
+    const GL = '▮▯#/_01ABCDEFX+';
+    document.querySelectorAll('[data-decode]').forEach((node, n) => {
+      const final = node.textContent, len = final.length, t0 = performance.now() + n * 90, dur = 620;
+      const step = now => {
+        const f = clamp01((now - t0) / dur), keep = Math.floor(f * len);
+        let s = final.slice(0, keep);
+        for (let i = keep; i < len; i++) s += final[i] === ' ' ? ' ' : GL[(i * 7 + Math.floor(now / 40)) % GL.length];
+        node.textContent = s;
+        if (f < 1) requestAnimationFrame(step); else node.textContent = final;
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  /* ---------------- boot ---------------- */
+  renderLog(st.t);
+  render();
+  if (reduce){ st.e.x = 1; render(); }
+  else setTimeout(() => { kick(); setTimeout(runScan, 500); }, 350);
+})();
+</script>
+<!-- ARTIFACT:END -->
+</body>
+</html>
